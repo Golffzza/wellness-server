@@ -18,7 +18,7 @@ const lineClient = new line.Client(lineConfig);
 
 // ---------- MIDDLEWARE ----------
 app.use(cors());
-app.use(express.json());
+// ❗ สำคัญ: ยังไม่ใช้ express.json() ตรงนี้ เพราะ LINE webhook ต้องอ่าน raw body ก่อน
 
 // ---------- DATABASE ----------
 const db = new sqlite3.Database('./queue.db');
@@ -51,6 +51,19 @@ const TIME_SLOTS = [
 ];
 // สมมติ 1 คนต่อ 1 slot ถ้าอยากเพิ่ม capacity ก็เปลี่ยนค่าได้
 const CAPACITY_PER_SLOT = 1;
+
+// ---------- LINE WEBHOOK ----------
+app.post('/webhook', line.middleware(lineConfig), (req, res) => {
+  Promise.all(req.body.events.map(handleLineEvent))
+    .then(result => res.json(result))
+    .catch(err => {
+      console.error(err);
+      res.status(500).end();
+    });
+});
+
+// ตอนนี้ค่อย parse JSON สำหรับ REST API ส่วนอื่น ๆ
+app.use(express.json());
 
 // ---------- REST API ----------
 
@@ -168,17 +181,7 @@ app.get('/api/my-bookings', (req, res) => {
   );
 });
 
-// ---------- LINE WEBHOOK ----------
-
-app.post('/webhook', line.middleware(lineConfig), (req, res) => {
-  Promise.all(req.body.events.map(handleLineEvent))
-    .then(result => res.json(result))
-    .catch(err => {
-      console.error(err);
-      res.status(500).end();
-    });
-});
-
+// ---------- LINE EVENT HANDLER ----------
 async function handleLineEvent(event) {
   // รับเฉพาะข้อความ
   if (event.type !== 'message' || event.message.type !== 'text') {
